@@ -29,8 +29,7 @@ ATTESTATION_COLS = [
 
 
 def bitlist_to_str(bitlist: spec.Bitlist):
-    length = bitlist.length()
-    return ''.join('1' if bitlist.get(i) else '0' for i in range(length))
+    return ''.join('1' if b else '0' for b in bitlist)
 
 
 def extract_attestation_rows(sbb: spec.SignedBeaconBlock):
@@ -44,7 +43,13 @@ def extract_attestation_rows(sbb: spec.SignedBeaconBlock):
         a.data.source.root,
         a.data.target.epoch,
         a.data.target.root
-    ) for a in attestations]
+    ) for a in attestations.readonly_iter()]
+
+
+def print_time():
+    # TODO: remove
+    import datetime
+    print(datetime.datetime.now())
 
 
 def export_blocks(lighthouse_dir, out_dir):
@@ -57,11 +62,18 @@ def export_blocks(lighthouse_dir, out_dir):
     try:
         count = 0
         for key, value in db:
+            if count >= 2:
+                break
+
             if key[:3] == BLOCK_PREFIX:
+                print_time()
                 signed_beacon_block = spec.SignedBeaconBlock.decode_bytes(value)
+                print_time()
 
                 blocks.append(extract_block_row(signed_beacon_block))
+                print_time()
                 attestations.extend(extract_attestation_rows(signed_beacon_block))
+                print_time()
 
                 if count > 0 and count % STEP_SIZE == 0:
                     print(f'{count} blocks processed')
