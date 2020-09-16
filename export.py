@@ -66,14 +66,10 @@ def export_blocks(lighthouse_dir, out_dir):
                 break
 
             if key[:3] == BLOCK_PREFIX:
-                print_time()
                 signed_beacon_block = spec.SignedBeaconBlock.decode_bytes(value)
-                print_time()
 
                 blocks.append(extract_block_row(signed_beacon_block))
-                print_time()
                 attestations.extend(extract_attestation_rows(signed_beacon_block))
-                print_time()
 
                 if count > 0 and count % STEP_SIZE == 0:
                     print(f'{count} blocks processed')
