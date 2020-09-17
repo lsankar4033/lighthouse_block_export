@@ -8,12 +8,12 @@ import eth2spec.phase0.spec as spec
 # See https://github.com/sigp/lighthouse/blob/ce10db15da0db4cbe76b96b58ccd1b40e39ed124/beacon_node/store/src/lib.rs#L195-L215
 BLOCK_PREFIX = b"blk"
 
-STEP_SIZE = 100
+STEP_SIZE = 1000
 
 BLOCK_COLS = ['state_root', 'slot', 'proposer_index']
 
 
-def extract_block_row(sbb: spec.SignedBeaconBlock):
+def extract_block(sbb: spec.SignedBeaconBlock):
     return (sbb.message.state_root, sbb.message.slot, sbb.message.proposer_index)
 
 
@@ -32,9 +32,7 @@ def bitlist_to_str(bitlist: spec.Bitlist):
     return ''.join('1' if b else '0' for b in bitlist)
 
 
-def extract_attestation_rows(sbb: spec.SignedBeaconBlock):
-    attestations = sbb.message.body.attestations
-
+def extract_attestations(sbb: spec.SignedBeaconBlock):
     return [(
         sbb.message.slot,
         a.data.beacon_block_root,
@@ -43,7 +41,37 @@ def extract_attestation_rows(sbb: spec.SignedBeaconBlock):
         a.data.source.root,
         a.data.target.epoch,
         a.data.target.root
-    ) for a in attestations.readonly_iter()]
+    ) for a in sbb.message.body.attestations.readonly_iter()]
+
+
+DEPOSIT_COLS = [
+    'slot',
+    'pubkey',
+    'amount'
+]
+
+
+def extract_deposits(sbb: spec.SignedBeaconBlock):
+    return [(
+        sbb.message.slot,
+        d.data.pubkey,
+        d.data.amount
+    ) for d in sbb.message.body.deposits.readonly_iter()]
+
+
+EXIT_COLS = [
+    'slot',
+    'exit_epoch',
+    'validator_index'
+]
+
+
+def extract_exits(sbb: spec.SignedBeaconBlock):
+    return [(
+        sbb.message.slot,
+        e.message.epoch,
+        e.message.validator_index
+    ) for e in sbb.message.body.voluntary_exits.readonly_iter()]
 
 
 def print_time():
@@ -58,20 +86,22 @@ def export_blocks(lighthouse_dir, out_dir):
 
     blocks = []
     attestations = []
+    deposits = []
+    exits = []
 
     try:
         count = 0
         for key, value in db:
-            if count >= 2:
-                break
-
             if key[:3] == BLOCK_PREFIX:
                 signed_beacon_block = spec.SignedBeaconBlock.decode_bytes(value)
 
-                blocks.append(extract_block_row(signed_beacon_block))
-                attestations.extend(extract_attestation_rows(signed_beacon_block))
+                blocks.append(extract_block(signed_beacon_block))
+                attestations.extend(extract_attestations(signed_beacon_block))
+                deposits.extend(extract_deposits(signed_beacon_block))
+                exits.extend(extract_exits(signed_beacon_block))
 
                 if count > 0 and count % STEP_SIZE == 0:
+                    print_time()
                     print(f'{count} blocks processed')
 
                     block_file = f"{out_dir}/blocks_{count // STEP_SIZE}.csv"
@@ -89,6 +119,22 @@ def export_blocks(lighthouse_dir, out_dir):
                         for attestation in attestations:
                             writer.writerow(attestation)
                     attestations = []
+
+                    deposit_file = f"{out_dir}/deposits_{count // STEP_SIZE}.csv"
+                    with open(deposit_file, 'w') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(DEPOSIT_COLS)
+                        for deposit in deposits:
+                            writer.writerow(deposit)
+                    deposits = []
+
+                    exit_file = f"{out_dir}/exits_{count // STEP_SIZE}.csv"
+                    with open(exit_file, 'w') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(EXIT_COLS)
+                        for exit in exits:
+                            writer.writerow(exit)
+                    exits = []
 
                 count += 1
 
